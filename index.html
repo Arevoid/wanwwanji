@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>万万集资源库</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>万万集资源库</h1>
+            <div class="menu-container">
+                <button id="menuBtn" class="menu-btn">☰</button>
+                <div class="menu-content">
+                    <div id="userSection" class="menu-section">
+                        <div id="loginButtons" class="login-buttons">
+                            <button id="showLoginBtn" class="menu-item">登录</button>
+                            <button id="showRegisterBtn" class="menu-item">注册</button>
+                        </div>
+                        <div id="userInfo" class="user-info" style="display: none;">
+                            <span id="username"></span>
+                        </div>
+                    </div>
+                    <div id="favoritesSection" class="menu-section" style="display: none;">
+                        <button id="showFavoritesBtn" class="menu-item">我的收藏</button>
+                    </div>
+                    <div id="logoutSection" class="menu-section" style="display: none;">
+                        <button id="logoutBtn" class="menu-item">退出登录</button>
+                    </div>
+                </div>
+            </div>
+            <div class="search-box">
+                <input type="text" id="searchInput" placeholder="搜索资源...">
+            </div>
+            <div class="announcement">
+                ⚠️ 资源过多善用搜索，宁少字不错字，及时保存，失效不补
+            </div>
+        </header>
+        
+        <div id="loginModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>登录</h2>
+                <form id="loginForm">
+                    <input type="text" placeholder="用户名" required>
+                    <input type="password" placeholder="密码" required>
+                    <button type="submit">登录</button>
+                </form>
+            </div>
+        </div>
+
+        <div id="registerModal" class="modal">
+            <div class="modal-content">
+                <span class="close">&times;</span>
+                <h2>注册</h2>
+                <form id="registerForm">
+                    <input type="text" placeholder="用户名" required>
+                    <input type="password" placeholder="密码" required>
+                    <input type="password" placeholder="确认密码" required>
+                    <button type="submit">注册</button>
+                </form>
+            </div>
+        </div>
+        
+        <main>
+            <div id="resourceList" class="resource-grid">
+                <!-- 资源将通过JavaScript动态加载 -->
+            </div>
+            <div id="loading" class="loading">加载中...</div>
+            <div id="error" class="error" style="display: none;"></div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html> 
