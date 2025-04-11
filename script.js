@@ -288,15 +288,20 @@ class UserManager {
 class ResourceLibrary {
     constructor() {
         this.resources = [];
+        this.currentPage = 1;
+        this.isLoading = false;
+        this.hasMore = true;
+        this.favoritesCounts = new Map();
+        this.viewCounts = new Map();
         this.displayedItems = ITEMS_PER_LOAD;
         this.searchInput = document.getElementById('searchInput');
         this.resourceList = document.getElementById('resourceList');
         this.loading = document.getElementById('loading');
         this.error = document.getElementById('error');
-        this.isLoading = false;
-        this.favoritesCounts = new Map();
         this.longPressTimeout = null;
-        this.longPressDelay = 500; // 长按时间阈值（毫秒）
+        this.longPressDelay = 500;
+        this.hotResources = [];
+        this.currentCategory = null; // 添加当前分类标记
         
         this.init();
         this.initScrollListener();
@@ -320,8 +325,14 @@ class ResourceLibrary {
     }
 
     async init() {
-        this.bindEvents();
+        this.loadViewCounts();
         await this.fetchResources();
+        this.initScrollListener();
+        this.bindEvents();
+        this.calculateFavoritesCounts();
+        this.hotResources = this.getHotResources();
+        this.updateHotResourcesDisplay();
+        this.initCategoryFilter(); // 初始化分类筛选
     }
 
     initScrollListener() {
@@ -435,52 +446,11 @@ class ResourceLibrary {
         const sortedResources = [...resources].sort((a, b) => {
             const countA = this.favoritesCounts.get(a.recordId) || 0;
             const countB = this.favoritesCounts.get(b.recordId) || 0;
-            return countB - countA; // 降序排列
+            return countB - countA;
         });
 
         const itemsToShow = sortedResources.slice(0, this.displayedItems);
-
-        this.resourceList.innerHTML = itemsToShow.map(resource => {
-            const title = resource.fields['标题（点击放大镜搜索关键词）'];
-            const url = resource.fields['链接']?.text || resource.fields['链接']?.title || '#';
-            const category = resource.fields['分类'] || '';
-            const createTime = this.formatDate(resource.fields['创建时间']);
-            const favoriteCount = this.favoritesCounts.get(resource.recordId) || 0;
-            
-            if (!title) return '';
-            
-            const isFavorite = window.userManager.isFavorite(resource.recordId);
-            
-            return `
-                <div class="resource-card" 
-                     data-record-id="${resource.recordId}"
-                     ontouchstart="window.resourceLibrary.handleTouchStart(event, '${resource.recordId}')"
-                     ontouchend="window.resourceLibrary.handleTouchEnd(event)"
-                     ontouchcancel="window.resourceLibrary.handleTouchEnd(event)">
-                    <div class="resource-header">
-                        <h3 class="resource-title">${title}</h3>
-                        ${category ? `<span class="resource-category">${category}</span>` : ''}
-                    </div>
-                    <div class="resource-footer">
-                        <div class="resource-info">
-                            <span class="resource-date">${createTime}</span>
-                            ${favoriteCount > 0 ? `<span class="favorite-count">收藏 ${favoriteCount}</span>` : ''}
-                            ${isFavorite ? '<span class="favorite-indicator">♥</span>' : ''}
-                        </div>
-                        <div class="resource-actions">
-                            ${url !== '#' ? `
-                                <a href="${url}" 
-                                   class="download-btn" 
-                                   onclick="window.resourceLibrary.handleLinkClick(event, '${url}')">
-                                   查看资源
-                                </a>
-                            ` : ''}
-                        </div>
-                    </div>
-                    <div class="long-press-indicator"></div>
-                </div>
-            `;
-        }).join('');
+        this.resourceList.innerHTML = itemsToShow.map(resource => this.createResourceCard(resource)).join('');
 
         this.loading.style.display = this.displayedItems < sortedResources.length ? 'block' : 'none';
         this.isLoading = false;
@@ -488,10 +458,15 @@ class ResourceLibrary {
 
     filterResources(searchTerm) {
         const filtered = this.resources.filter(resource => {
-            const title = resource.fields['标题（点击放大镜搜索关键词）'] || '';
+            const title = resource.fields['标题（点击放大镜搜索关键词）'] || resource.fields['标题'] || '';
             const category = resource.fields['分类'] || '';
-            return title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                   category.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            // 同时满足搜索词和分类条件
+            const matchesSearch = title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                category.toLowerCase().includes(searchTerm.toLowerCase());
+            const matchesCategory = !this.currentCategory || category === this.currentCategory;
+            
+            return matchesSearch && matchesCategory;
         });
         this.renderResources(filtered);
     }
@@ -565,6 +540,163 @@ class ResourceLibrary {
         
         // 在当前窗口打开链接
         window.location.href = url;
+    }
+
+    // 添加获取热门资源的方法
+    getHotResources() {
+        // 将资源按浏览量排序并返回前6个
+        return [...this.resources]
+            .sort((a, b) => (this.viewCounts.get(b.recordId) || 0) - (this.viewCounts.get(a.recordId) || 0))
+            .slice(0, 6);
+    }
+
+    // 更新资源的浏览量
+    incrementViewCount(recordId) {
+        const currentCount = this.viewCounts.get(recordId) || 0;
+        this.viewCounts.set(recordId, currentCount + 1);
+        // 保存到localStorage
+        localStorage.setItem('resource_views', JSON.stringify(Array.from(this.viewCounts.entries())));
+        this.updateHotResourcesDisplay();
+    }
+
+    // 从localStorage加载浏览量数据
+    loadViewCounts() {
+        const savedViews = localStorage.getItem('resource_views');
+        if (savedViews) {
+            this.viewCounts = new Map(JSON.parse(savedViews));
+        }
+    }
+
+    // 更新热门资源显示
+    updateHotResourcesDisplay() {
+        const hotResources = this.getHotResources();
+        const hotResourcesContainer = document.querySelector('.hot-resources-grid');
+        if (!hotResourcesContainer) return;
+
+        hotResourcesContainer.innerHTML = hotResources.map(resource => this.createResourceCard(resource, true)).join('');
+    }
+
+    // 添加截断标题的方法
+    truncateTitle(title, maxLength = 30) {
+        if (title.length <= maxLength) return title;
+        return title.slice(0, maxLength) + '...';
+    }
+
+    // 修改createResourceCard方法
+    createResourceCard(resource, isHot = false) {
+        const viewCount = this.viewCounts.get(resource.recordId) || 0;
+        const isFavorite = window.userManager.currentUser?.favorites.includes(resource.recordId);
+        const favoriteCount = this.favoritesCounts.get(resource.recordId) || 0;
+        const fullTitle = resource.fields['标题（点击放大镜搜索关键词）'] || resource.fields['标题'] || '';
+        const truncatedTitle = this.truncateTitle(fullTitle);
+        const url = resource.fields['链接']?.text || resource.fields['链接']?.title || '#';
+        const category = resource.fields['分类'] || '未分类';
+        
+        return `
+            <div class="resource-card" data-record-id="${resource.recordId}" 
+                 onclick="if(!event.target.closest('.resource-category, .resource-actions')) { window.resourceLibrary.handleCardClick(event, '${url}', '${resource.recordId}') }">
+                <div class="resource-header">
+                    <h3 class="resource-title" title="${fullTitle}">${truncatedTitle}</h3>
+                    <span class="resource-category${this.currentCategory === category ? ' active' : ''}" 
+                          onclick="event.stopPropagation(); window.resourceLibrary.handleCategoryClick('${category}')">${category}</span>
+                </div>
+                <div class="resource-description">${fullTitle}</div>
+                <div class="resource-footer">
+                    <div class="resource-meta">
+                        <span class="views-count">${viewCount} 次浏览</span>
+                        <span class="resource-date">${this.formatDate(resource.fields.创建时间)}</span>
+                        ${favoriteCount > 0 ? `<span class="favorite-count">收藏 ${favoriteCount}</span>` : ''}
+                        ${isFavorite ? '<span class="favorite-indicator">♥</span>' : ''}
+                    </div>
+                    <div class="resource-actions">
+                        ${url !== '#' ? `
+                            <a href="${url}" 
+                               class="download-btn" 
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               onclick="event.stopPropagation(); window.resourceLibrary.incrementViewCount('${resource.recordId}')">
+                               查看资源
+                            </a>
+                        ` : ''}
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    // 添加分类筛选初始化方法
+    initCategoryFilter() {
+        // 创建清除筛选按钮
+        const clearFilter = document.createElement('button');
+        clearFilter.className = 'clear-filter';
+        clearFilter.textContent = '清除分类筛选';
+        clearFilter.onclick = () => this.clearCategoryFilter();
+        
+        // 插入到合适的位置
+        const allResources = document.querySelector('.all-resources');
+        if (allResources) {
+            allResources.insertBefore(clearFilter, this.resourceList);
+        }
+    }
+
+    // 处理分类点击
+    handleCategoryClick(category) {
+        if (this.currentCategory === category) {
+            this.clearCategoryFilter();
+            return;
+        }
+
+        this.currentCategory = category;
+        this.displayedItems = ITEMS_PER_LOAD;
+        
+        // 更新所有分类标签的状态
+        document.querySelectorAll('.resource-category').forEach(el => {
+            if (el.textContent === category) {
+                el.classList.add('active');
+            } else {
+                el.classList.remove('active');
+            }
+        });
+
+        // 显示清除筛选按钮
+        const clearFilter = document.querySelector('.clear-filter');
+        if (clearFilter) {
+            clearFilter.classList.add('visible');
+        }
+
+        // 筛选并显示资源
+        this.filterResources(this.searchInput.value);
+    }
+
+    // 清除分类筛选
+    clearCategoryFilter() {
+        this.currentCategory = null;
+        this.displayedItems = ITEMS_PER_LOAD;
+        
+        // 移除所有分类标签的激活状态
+        document.querySelectorAll('.resource-category').forEach(el => {
+            el.classList.remove('active');
+        });
+
+        // 隐藏清除筛选按钮
+        const clearFilter = document.querySelector('.clear-filter');
+        if (clearFilter) {
+            clearFilter.classList.remove('visible');
+        }
+
+        // 重新显示资源
+        this.filterResources(this.searchInput.value);
+    }
+
+    // 添加卡片点击处理方法
+    handleCardClick(event, url, recordId) {
+        if (url === '#') return;
+        
+        // 增加浏览量
+        this.incrementViewCount(recordId);
+        
+        // 在新标签页中打开链接
+        window.open(url, '_blank', 'noopener,noreferrer');
     }
 }
 
