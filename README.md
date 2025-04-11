@@ -1,6 +1,7 @@
 # 万万集资源库
 
 这是一个资源分享网站，提供各类资源的浏览和搜索功能。
+链接：https://Arevoid.github.io/wanwwanji
 
 ## 功能特点
 
