@@ -64,13 +64,23 @@
         </div>
         
         <main>
-            <div id="resourceList" class="resource-grid">
-                <!-- 资源将通过JavaScript动态加载 -->
-            </div>
+            <section class="hot-resources">
+                <h2>热门资源</h2>
+                <div class="hot-resources-grid">
+                    <!-- 热门资源将通过JavaScript动态加载 -->
+                </div>
+            </section>
+            <section class="all-resources">
+                <h2>全部资源</h2>
+                <div id="resourceList" class="resource-grid">
+                    <!-- 资源将通过JavaScript动态加载 -->
+                </div>
+            </section>
             <div id="loading" class="loading">加载中...</div>
             <div id="error" class="error" style="display: none;"></div>
         </main>
     </div>
+
     <script src="script.js"></script>
 </body>
 </html> 
